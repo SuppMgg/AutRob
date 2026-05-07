@@ -38,7 +38,7 @@ uint8_t queue[5][5];
 uint8_t walls[5][5];
 uint8_t visited[5][5];
 uint8_t closed[5][5];
-const int8_t dx[4] = {0, 1, 0, -1};
+const int8_t dx[4] = {0, -1, 0, 1};
 const int8_t dy[4] = {1, 0, -1, 0};
 uint8_t posX = 0, posY = 0, dir = 0, prevX, prevY, rast = 140, vx, vy, goalX, goalY, vdir = dir;
 bool wallF, wallL, wallR;
@@ -342,9 +342,9 @@ void moveTo(int targetDir) {
   int turn = (targetDir - dir + 4) % 4;
   switch (turn) {
     case 0: forward(); break;
-    case 1: right(); forward(); break;
+    case 1: left(); forward(); break;
     case 2: around(); forward(); break;
-    case 3: left(); forward(); break;
+    case 3: right(); forward(); break;
   }
   dir = targetDir;
   posX += dx[dir];
