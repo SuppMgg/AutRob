@@ -1,11 +1,3 @@
-/*
-0 - 152
-1 - 162
-2 - 98
-3 - 226
-4 - 34
-*/
-
 #include <DxlMaster.h>
 #include <VL53L0X.h>
 #include <Wire.h>
@@ -146,13 +138,13 @@ void setup() {
 }
 
 void loop() {
-  readSensors();
+  readSensors(); //чтение данных с дальномеров
   memset(queue, 0, sizeof(queue));
   memset(h, 99, sizeof(h));
   memset(g, 99, sizeof(g));
   g[posX][posY] = 0;
   uint8_t ch = 0;
-  while (ch < 2){
+  while (ch < 2){ //получение данных с ИК-пульта дважды: координата Х и Y
     while(!ir.available()){}
     switch(ir.readCommand()){
       case 152: n = 1; (ch == 0)? goalX = 0 : goalY = 0; ch++; break;
@@ -162,18 +154,18 @@ void loop() {
       case 34: n = 1; (ch == 0)? goalX = 4 : goalY = 4; ch++; break;
       default: n = 0; (ch == 0)? goalX = 99 : goalY = 99; break;
     }
-    digitalWrite(3, n);
+    digitalWrite(3, n); 
     delay(300);
-    digitalWrite(3, 0);
+    digitalWrite(3, 0); //мигание светодиодом - подтверждение получения сигнала
   }
-  wave(goalX, goalY);
-  searchPath();
+  wave(goalX, goalY);//заполнение массива h, хранящего эвристику для всей карты 
+  searchPath();//построение пути виртуально по алгоритму
 
-  while(posX != goalX || posY != goalY){
-    readSensors();
-    moveTo(newPlace());
+  while(posX != goalX || posY != goalY){ //прохождение маршрута 
+    readSensors(); //чтение данных с дальномеров
+    moveTo(newPlace()); //переход к вершине в направлении, возвращаемом newPlace
   }
-  motor1.speed(0);
+  motor1.speed(0); //остановка движения (приход к цели), ожидание новой цели
   motor2.speed(0);
 }
 
@@ -202,190 +194,184 @@ void searchPath() {
     memset(closed, 0, sizeof(closed));
     visited[vx][vy] = 1;
     while(h[vx][vy] != 0){
-        minDist = 99;
-        if (!queue[vx][vy]) queue[vx][vy] = (!Fork()) ? 1 : 2;
+      minDist = 99;
+      if (!queue[vx][vy]) queue[vx][vy] = (!Fork()) ? 1 : 2;
+      for (int8_t i = 0; i < 4; i++) {
+          int8_t testDir = (vdir + i) % 4;
+          int8_t nx = vx + dx[testDir];
+          int8_t ny = vy + dy[testDir];
+        if (!wallVirt(testDir, vx, vy)) {
+          if (nx >= 0 && nx < 5 && ny >= 0 && ny < 5 && queue[nx][ny] != 99 && !visited[nx][ny]) {
+            if (g[nx][ny] == 99) g[nx][ny] = g[vx][vy] + 1;
+            if (g[nx][ny] + h[nx][ny] < minDist) {
+              minDist = g[nx][ny] + h[nx][ny];
+              bx = nx;
+              by = ny;
+              bdir = testDir;
+            }
+          }
+        }
+      }
+      visited[bx][by] = 1;
+      if (Fork()){
         for (int8_t i = 0; i < 4; i++) {
-            int8_t testDir = (vdir + i) % 4;
-            int8_t nx = vx + dx[testDir];
-            int8_t ny = vy + dy[testDir];
+          int8_t testDir = (vdir + i) % 4;
+          int8_t nx = vx + dx[testDir];
+          int8_t ny = vy + dy[testDir];
           if (!wallVirt(testDir, vx, vy)) {
-            if (nx >= 0 && nx < 5 && ny >= 0 && ny < 5 && queue[nx][ny] != 99 && !visited[nx][ny]) {
+            if (nx >= 0 && nx < 5 && ny >= 0 && ny < 5 && queue[nx][ny] != 99 && nx != bx && ny != by && !visited[nx][ny]) {
               if (g[nx][ny] == 99) g[nx][ny] = g[vx][vy] + 1;
-              if (g[nx][ny] + h[nx][ny] < minDist) {
-                minDist = g[nx][ny] + h[nx][ny];
-                bx = nx;
-                by = ny;
-                bdir = testDir;
+              if (g[nx][ny] + h[nx][ny] < Reus) {
+                Reus = g[nx][ny] + h[nx][ny];
+                rx = nx;
+                ry = ny;
               }
             }
           }
         }
-        visited[bx][by] = 1;
-        if (Fork()){
-            for (int8_t i = 0; i < 4; i++) {
-                int8_t testDir = (vdir + i) % 4;
-                int8_t nx = vx + dx[testDir];
-                int8_t ny = vy + dy[testDir];
-                if (!wallVirt(testDir, vx, vy)) {
-                    if (nx >= 0 && nx < 5 && ny >= 0 && ny < 5 && queue[nx][ny] != 99 && nx != bx && ny != by && !visited[nx][ny]) {
-                        if (g[nx][ny] == 99) g[nx][ny] = g[vx][vy] + 1;
-                        if (g[nx][ny] + h[nx][ny] < Reus) {
-                            Reus = g[nx][ny] + h[nx][ny];
-                            rx = nx;
-                            ry = ny;
-                        }
-                    }
-                }
+      }
+      if (walls[vx][vy] == 15){
+        for (uint8_t x = 0; x < 5; x++){
+          for (uint8_t y = 0; y < 5; y++){
+            if (queue[x][y] == 3) queue[x][y] = 99;
+            if (queue[x][y] == 4) {
+              vx = x;
+              vy = y;
+              Reus = 99;
+              goto home_yolter;
             }
+          }
         }
-        if (walls[vx][vy] == 15){
-            for (uint8_t x = 0; x < 5; x++){
-                for (uint8_t y = 0; y < 5; y++){
-                    if (queue[x][y] == 3) queue[x][y] = 99;
-                    if (queue[x][y] == 4) {
-                        vx = x;
-                        vy = y;
-                        Reus = 99;
-                        goto home_yolter;
-                    }
-                }
+        for (uint8_t x = 0; x < 5; x++){
+          for (uint8_t y = 0; y < 5; y++){
+            if (queue[x][y] == 3) queue[x][y] = 99;
+            if (queue[x][y] == 2) {
+              vx = x;
+              vy = y;
+              queue[x][y] = 0;
+              goto home_yolter;
             }
-            for (uint8_t x = 0; x < 5; x++){
-                for (uint8_t y = 0; y < 5; y++){
-                    if (queue[x][y] == 3) queue[x][y] = 99;
-                    if (queue[x][y] == 2) {
-                        vx = x;
-                        vy = y;
-                        queue[x][y] = 0;
-                        goto home_yolter;
-                    }
-                }
-            }
+          }
         }
-        if (queue[vx][vy] == 2) queue[bx][by] = 3;
-        if (Reus < minDist) {
-            queue[vx][vy] = 4;
-            vx = rx;
-            vy = ry;
-            Reus = 99;
-            goto home_yolter;
-        }
-        vx = bx;
-        vy = by;
-        vdir = bdir;
-        home_yolter:
-        ;
+      }
+      if (queue[vx][vy] == 2) queue[bx][by] = 3;
+      if (Reus < minDist) {
+        queue[vx][vy] = 4;
+        vx = rx;
+        vy = ry;
+        Reus = 99;
+        goto home_yolter;
+      }
+      vx = bx;
+      vy = by;
+      vdir = bdir;
+      home_yolter:
+      ;
     }
     for (uint8_t x = 0; x < 5; x++){
-        for (uint8_t y = 0; y < 5; y++){
-            if (g[x][y] != 99 && visited[x][y]) queue[x][y] = 1;
-            if (queue[x][y] == 2 || queue[x][y] == 3) queue[x][y] = 1;
-        }
+      for (uint8_t y = 0; y < 5; y++){
+        if (g[x][y] != 99 && visited[x][y]) queue[x][y] = 1;
+        if (queue[x][y] == 2 || queue[x][y] == 3) queue[x][y] = 1;
+      }
     }
 }
 
 int newPlace() {
-    uint8_t bestDir = 99;
-    int8_t nx, ny;
-    vx = posX; vy = posY;
-    vdir = dir;
-    closed[vx][vy] = 1;
-    for (int8_t i = 0; i < 4; i++) {
-        int8_t testDir = (dir + i) % 4;
-        nx = posX + dx[testDir];
-        ny = posY + dy[testDir];
-        if (!wallIn(testDir)) {
-            if (wallVirt(testDir, vx, vy)) {
-              walls[posX][posY] &= ~(1 << testDir);
-              if (nx >= 0 && nx < 5 && ny >= 0 && ny < 5) walls[nx][ny] &= ~(1 << ((testDir + 2) % 4));
-                memset(g, 99, sizeof(g));
-                g[posX][posY] = 0;
-                wave(goalX, goalY);
-                memset(queue, 0, sizeof(queue));
-                searchPath();
-                return newPlace(); 
-            }
-            if (nx >= 0 && nx < 5 && ny >= 0 && ny < 5 && queue[nx][ny] == 1 && !closed[nx][ny]) {
-                bestDir = testDir;
-                break;
-            }
+  uint8_t bestDir = 99;
+  int8_t nx, ny;
+  vx = posX; vy = posY;
+  vdir = dir;
+  closed[vx][vy] = 1;
+  for (int8_t i = 0; i < 4; i++) {
+    int8_t testDir = (dir + i) % 4;
+    nx = posX + dx[testDir];
+    ny = posY + dy[testDir];
+    if (!wallIn(testDir)) {
+        if (wallVirt(testDir, vx, vy)) {
+          walls[posX][posY] &= ~(1 << testDir);
+          if (nx >= 0 && nx < 5 && ny >= 0 && ny < 5) walls[nx][ny] &= ~(1 << ((testDir + 2) % 4));
+          memset(g, 99, sizeof(g));
+          g[posX][posY] = 0;
+          wave(goalX, goalY);
+          memset(queue, 0, sizeof(queue));
+          searchPath();
+          return newPlace(); 
         }
-        else if (wallIn(testDir) && !wallVirt(testDir, vx, vy)) {
-            walls[posX][posY] |= (1 << testDir);
-            if (nx >= 0 && nx < 5 && ny >= 0 && ny < 5) walls[nx][ny] |= (1 << ((testDir + 2) % 4));
-            if (queue[nx][ny] == 1){
-                memset(g, 99, sizeof(g));
-                g[posX][posY] = 0;
-                wave(goalX, goalY);
-                memset(queue, 0, sizeof(queue));
-                if (wallF && wallL && wallR){
-                    around();
-                    dir = (dir + 2) % 4;
-                }
-                searchPath();
-                return newPlace();
-            }
+        if (nx >= 0 && nx < 5 && ny >= 0 && ny < 5 && queue[nx][ny] == 1 && !closed[nx][ny]) {
+          bestDir = testDir;
+          break;
         }
     }
-    return bestDir;
+    else if (wallIn(testDir) && !wallVirt(testDir, vx, vy)) {
+      walls[posX][posY] |= (1 << testDir);
+      if (nx >= 0 && nx < 5 && ny >= 0 && ny < 5) walls[nx][ny] |= (1 << ((testDir + 2) % 4));
+      if (queue[nx][ny] == 1){
+        memset(g, 99, sizeof(g));
+        g[posX][posY] = 0;
+        wave(goalX, goalY);
+        memset(queue, 0, sizeof(queue));
+        if (wallF && wallL && wallR){
+          around();
+          dir = (dir + 2) % 4;
+        }
+        searchPath();
+        return newPlace();
+      }
+    }
+  }
+  return bestDir;
 }
 
 bool wallVirt(int testDir, uint8_t vx, uint8_t vy) {
-    return (walls[vx][vy] >> testDir) & 1;
+  return (walls[vx][vy] >> testDir) & 1;
 }
 
 bool wallIn(int testDir) {
-    int relDir = (testDir - dir + 4) % 4;
-    switch (relDir) {
-        case 0: return wallF;
-        case 1: return wallR;
-        case 2: return false;
-        case 3: return wallL;
-    }
-    return false;
+  int relDir = (testDir - dir + 4) % 4;
+  switch (relDir) {
+    case 0: return wallF;
+    case 1: return wallR;
+    case 2: return false;
+    case 3: return wallL;
+  }
+  return false;
 }
 
 void moveTo(int targetDir) {
-    if (targetDir == 99) goto qwerty;
-    int turn = (targetDir - dir + 4) % 4;
-    switch (turn) {
-        case 0: forward(); break;
-        case 1: right(); forward(); break;
-        case 2: around(); forward(); break;
-        case 3: left(); forward(); break;
-    }
-    dir = targetDir;
-    posX += dx[dir];
-    posY += dy[dir];
-    qwerty:
-    ;
+  if (targetDir == 99) goto qwerty;
+  int turn = (targetDir - dir + 4) % 4;
+  switch (turn) {
+    case 0: forward(); break;
+    case 1: right(); forward(); break;
+    case 2: around(); forward(); break;
+    case 3: left(); forward(); break;
+  }
+  dir = targetDir;
+  posX += dx[dir];
+  posY += dy[dir];
+  qwerty:
+  ;
 }
 
 bool Fork() {
-    int freeDirs = 0;
-    for (int i = 0; i < 4; i++) {
-        int testDir = (vdir + i) % 4;
-        if (!wallVirt(testDir, vx, vy)) freeDirs++;
-    }
-    return freeDirs >= 2;
+  int freeDirs = 0;
+  for (int i = 0; i < 4; i++) {
+    int testDir = (vdir + i) % 4;
+    if (!wallVirt(testDir, vx, vy)) freeDirs++;
+  }
+  return freeDirs >= 2;
 }
 
 void forward() {
-  startYaw = getYaw();
   unsigned long tStart = millis();
   motor1.speed(BASE_SPEED);
   motor2.speed(-BASE_SPEED);
   while (millis() - tStart < 1800) {
-    // currentYaw = getYaw();
-    // float err = angleDiff(currentYaw, startYaw);
-    // int corr = (int)(err * KP);
-    // int left_speed = constrain(BASE_SPEED + corr, 150, 1023);
-    // int right_speed = constrain(BASE_SPEED - corr, 150, 1023);
     readSensors();
+    if (Sensor_Vl[0] < rast - 20) break;
     motor1.speed(BASE_SPEED);
     motor2.speed(-BASE_SPEED);
     delay(20);
-    if (Sensor_Vl[0] < rast - 20) break;
   }
   motor1.speed(0);
   motor2.speed(0);
