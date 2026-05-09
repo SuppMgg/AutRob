@@ -41,7 +41,7 @@ uint8_t closed[5][5];
 const int8_t dx[4] = {0, -1, 0, 1};
 const int8_t dy[4] = {1, 0, -1, 0};
 uint8_t posX = 0, posY = 0, dir = 0, prevX, prevY, rast = 140, vx, vy, goalX, goalY, vdir = dir;
-bool wallF, wallL, wallR;
+bool wallF, wallL, wallR, un;
 
 enum ID {
   id1 = 1,
@@ -158,10 +158,15 @@ void loop() {
     delay(300);
     digitalWrite(3, 0); //мигание светодиодом - подтверждение получения сигнала
   }
+  un = 0;
   wave(goalX, goalY);//заполнение массива h, хранящего эвристику для всей карты 
   searchPath();//построение пути виртуально по алгоритму
 
-  while(posX != goalX || posY != goalY){ //прохождение маршрута 
+  if (walls[goalX][goalY] == 15) {
+    un != un;
+    Serial.println("Вершина недостижима");
+  }  
+  while(posX != goalX || posY != goalY || un){ //прохождение маршрута 
     readSensors(); //чтение данных с дальномеров
     moveTo(newPlace()); //переход к вершине в направлении, возвращаемом newPlace
   }
